@@ -43,11 +43,10 @@ services:
       retries: 10
 
   # One-shot: apply migrations, then exit. API waits for this to finish.
+  # Reuses the image built by the `api` service (same Dockerfile) — must NOT
+  # declare its own build, or buildx races `api` exporting the same tag.
   migrate:
     image: tricon-it-hub-api:latest
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
     container_name: tricon-migrate
     command: ["pnpm", "--filter", "@tricon/db", "exec", "prisma", "migrate", "deploy"]
     working_dir: /app
