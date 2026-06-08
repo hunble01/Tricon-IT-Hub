@@ -1,13 +1,13 @@
 # Production stack for Tricon IT Hub — single VPS, fully self-contained.
 #
 # Designed to COEXIST with other apps on the same host:
-#   - Only Caddy publishes host ports (80/443). Postgres, Redis, API, and Web
-#     are reachable ONLY on the private `tricon-net` network — they publish
-#     nothing, so they can't collide with another app's ports.
+#   - Only Caddy publishes a host port (8080 here — 80/443 belong to revoai on
+#     this VPS). Postgres, Redis, API, and Web are reachable ONLY on the private
+#     `tricon-net` network — they publish nothing, so they can't collide.
 #   - All containers + volumes are namespaced `tricon-*`.
 #
 # Bring up:   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
-# (If another app already owns 80/443, see DEPLOY.md → "Behind an existing proxy".)
+# (If you later get a domain / own 80/443, see DEPLOY.md → "Behind an existing proxy".)
 
 name: tricon-it-hub
 
@@ -103,11 +103,10 @@ services:
     image: caddy:2-alpine
     container_name: tricon-caddy
     restart: unless-stopped
-    # The ONLY service that touches host ports. If another proxy owns these,
-    # remove this service (see DEPLOY.md) and point your proxy at web/api.
+    # 80/443 belong to another app (revoai) on this host. Publish the hub's
+    # Caddy on a spare host port instead; it still listens on :80 internally.
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
     environment:
       # hub.example.com → auto-HTTPS. ":80" → plain HTTP (IP-only, no domain).
       SITE_ADDRESS: ${SITE_ADDRESS}
