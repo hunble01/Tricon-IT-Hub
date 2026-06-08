@@ -105,7 +105,8 @@ function Detail({ device }: { device: DeviceDetail }) {
           </dl>
           {device.purchaseCost == null && (
             <p className="mt-3 text-xs text-ink-faint">
-              No purchase record linked. Items added via Procurement carry cost &amp; invoice provenance.
+              No purchase record yet. Add cost &amp; date by editing the device, or via Procurement
+              (which also links the invoice line item).
             </p>
           )}
         </SectionCard>

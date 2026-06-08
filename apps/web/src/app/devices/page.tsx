@@ -10,6 +10,8 @@ import { api, ApiError } from "@/lib/api";
 const DEVICE_TYPES = [
   "LAPTOP", "SURFACE", "PHONE", "TABLET", "HEADSET",
   "DOCK", "MONITOR", "MINI_PC", "USB_ADAPTER", "OTHER",
+  // Updates §6a — peripherals tracked per-item.
+  "KEYBOARD", "MOUSE", "WEBCAM", "CABLE", "ADAPTER",
 ] as const;
 const STATUSES = ["IN_STOCK", "ASSIGNED", "RETURNED", "IN_REPAIR", "RETIRED"] as const;
 
@@ -198,6 +200,9 @@ function NewDevicePanel() {
   const [serialNumber, setSerialNumber] = useState("");
   const [model, setModel] = useState("");
   const [locationId, setLocationId] = useState("");
+  const [purchaseCost, setPurchaseCost] = useState("");
+  const [purchaseDate, setPurchaseDate] = useState("");
+  const [purchaseLocationId, setPurchaseLocationId] = useState("");
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,9 +224,14 @@ function NewDevicePanel() {
           serialNumber: serialNumber || undefined,
           model: model || undefined,
           locationId: locationId || undefined,
+          // Updates §6a — provenance (omit empty so the API skips them).
+          purchaseCost: purchaseCost ? Number(purchaseCost) : undefined,
+          purchaseDate: purchaseDate ? new Date(purchaseDate).toISOString() : undefined,
+          purchaseLocationId: purchaseLocationId || undefined,
         },
       });
       setAssetTag(""); setSerialNumber(""); setModel(""); setLocationId("");
+      setPurchaseCost(""); setPurchaseDate(""); setPurchaseLocationId("");
       window.location.reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Create failed");
@@ -257,6 +267,30 @@ function NewDevicePanel() {
             {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </label>
+
+        <div className="border-t border-line pt-3.5">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Provenance <span className="font-normal normal-case">(optional)</span></p>
+          <div className="mt-2.5 grid grid-cols-2 gap-3">
+            <label className="block text-[13px] font-medium text-ink-soft">
+              Cost (CAD)
+              <input type="number" min="0" step="0.01" inputMode="decimal" value={purchaseCost}
+                onChange={(e) => setPurchaseCost(e.target.value)} className="field mt-1.5" placeholder="0.00" />
+            </label>
+            <label className="block text-[13px] font-medium text-ink-soft">
+              Purchased
+              <input type="date" value={purchaseDate}
+                onChange={(e) => setPurchaseDate(e.target.value)} className="field mt-1.5" />
+            </label>
+          </div>
+          <label className="mt-3 block text-[13px] font-medium text-ink-soft">
+            Purchased for site
+            <select value={purchaseLocationId} onChange={(e) => setPurchaseLocationId(e.target.value)} className="field mt-1.5">
+              <option value="">—</option>
+              {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </label>
+        </div>
+
         {error && <ErrorNote>{error}</ErrorNote>}
         <button type="submit" disabled={busy} className="btn-primary w-full">
           {busy ? "Saving…" : "Create device"}

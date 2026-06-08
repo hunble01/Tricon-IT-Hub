@@ -93,6 +93,10 @@ export class DevicesService {
       model: dto.model,
       status: dto.status,
       notes: dto.notes,
+      // Updates §6a — provenance is editable after creation.
+      purchaseCost: dto.purchaseCost,
+      purchaseDate: dto.purchaseDate,
+      purchaseLocationId: dto.purchaseLocationId,
     };
     if (dto.locationId !== undefined) {
       data.location = dto.locationId

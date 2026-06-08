@@ -47,18 +47,28 @@ type RoleSeed = {
   devices: Array<{ type: DeviceType; quantity?: number }>;
 };
 
+// Updates §6b — desk-based (laptop) roles get the full deskside peripheral kit so
+// expected-vs-actual + the "missing peripheral" alerts have real data to work against.
+// A laptop at a desk implies dock + monitor + keyboard + mouse; webcam for video-heavy roles.
+const DESK_KIT = [
+  { type: DeviceType.DOCK },
+  { type: DeviceType.MONITOR, quantity: 2 },
+  { type: DeviceType.KEYBOARD },
+  { type: DeviceType.MOUSE },
+];
+
 const roles: RoleSeed[] = [
   { title: "Maintenance Technician",            category: "BUILDING_STAFF", isSharedDevice: false, devices: [{ type: DeviceType.PHONE }] },
-  { title: "Maintenance Manager",               category: "MANAGER",        isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }] },
+  { title: "Maintenance Manager",               category: "MANAGER",        isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }, ...DESK_KIT] },
   { title: "Concierge",                         category: "BUILDING_STAFF", isSharedDevice: true,  devices: [] },
-  { title: "Property Manager",                  category: "MANAGER",        isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }] },
-  { title: "Property Administrator",            category: "BUILDING_STAFF", isSharedDevice: false, devices: [{ type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }] },
-  { title: "Leasing Consultant",                category: "BUILDING_STAFF", isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.SURFACE }, { type: DeviceType.HEADSET }] },
-  { title: "Director, Operations",              category: "MANAGER",        isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }] },
-  { title: "General Manager, CPM",              category: "CORPORATE",      isSharedDevice: false, devices: [{ type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }] },
-  { title: "Resident Experience Manager",       category: "MANAGER",        isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }] },
+  { title: "Property Manager",                  category: "MANAGER",        isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }, ...DESK_KIT, { type: DeviceType.WEBCAM }] },
+  { title: "Property Administrator",            category: "BUILDING_STAFF", isSharedDevice: false, devices: [{ type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }, ...DESK_KIT] },
+  { title: "Leasing Consultant",                category: "BUILDING_STAFF", isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.SURFACE }, { type: DeviceType.HEADSET }, { type: DeviceType.DOCK }, { type: DeviceType.MONITOR }, { type: DeviceType.KEYBOARD }, { type: DeviceType.MOUSE }] },
+  { title: "Director, Operations",              category: "MANAGER",        isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }, ...DESK_KIT, { type: DeviceType.WEBCAM }] },
+  { title: "General Manager, CPM",              category: "CORPORATE",      isSharedDevice: false, devices: [{ type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }, ...DESK_KIT, { type: DeviceType.WEBCAM }] },
+  { title: "Resident Experience Manager",       category: "MANAGER",        isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }, ...DESK_KIT, { type: DeviceType.WEBCAM }] },
   { title: "Dockmaster (Receiving Coordinator)", category: "BUILDING_STAFF", isSharedDevice: false, devices: [{ type: DeviceType.PHONE }, { type: DeviceType.TABLET }, { type: DeviceType.HEADSET }] },
-  { title: "Lease Administrator",               category: "CORPORATE",      isSharedDevice: false, devices: [{ type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }] },
+  { title: "Lease Administrator",               category: "CORPORATE",      isSharedDevice: false, devices: [{ type: DeviceType.LAPTOP }, { type: DeviceType.HEADSET }, ...DESK_KIT] },
 ];
 
 // ────────────────────────────────────────────────────────────

@@ -1,9 +1,12 @@
 import { DeviceStatus, DeviceType } from "@prisma/client";
 import {
+  IsDateString,
   IsEnum,
+  IsNumber,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
 } from "class-validator";
 
 export class CreateDeviceDto {
@@ -27,6 +30,17 @@ export class CreateDeviceDto {
 
   @IsOptional() @IsString()
   notes?: string;
+
+  // Updates §6a — purchase provenance for hand-entered / legacy assets,
+  // so manually-added devices carry the same cost/age data procurement sets.
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0)
+  purchaseCost?: number;
+
+  @IsOptional() @IsDateString()
+  purchaseDate?: string;
+
+  @IsOptional() @IsString()
+  purchaseLocationId?: string;
 }
 
 export class UpdateDeviceDto {
@@ -47,6 +61,16 @@ export class UpdateDeviceDto {
 
   @IsOptional() @IsString()
   notes?: string;
+
+  // Updates §6a — purchase provenance (editable after creation).
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0)
+  purchaseCost?: number | null;
+
+  @IsOptional() @IsDateString()
+  purchaseDate?: string | null;
+
+  @IsOptional() @IsString()
+  purchaseLocationId?: string | null;
 }
 
 export class AssignDeviceDto {
