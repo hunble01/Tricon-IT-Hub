@@ -1,0 +1,18 @@
+# Reverse proxy for Tricon IT Hub.
+# SITE_ADDRESS comes from .env.prod:
+#   - "hub.example.com"  → Caddy auto-provisions a real HTTPS certificate
+#   - ":80"              → plain HTTP only (use when you have no domain yet)
+#
+# Routing: /api/* → NestJS API (serves the /api prefix); everything else → Next.js.
+
+{$SITE_ADDRESS} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

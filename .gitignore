@@ -1,0 +1,30 @@
+# deps
+node_modules
+.pnpm-store
+
+# build
+dist
+.next
+out
+build
+.turbo
+
+# env — ignore ALL real env files, keep only the *.example templates
+.env
+.env.*
+!.env.example
+!.env.prod.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# prisma
+packages/db/prisma/migrations/dev.db*

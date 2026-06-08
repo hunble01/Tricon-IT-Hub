@@ -1,0 +1,17 @@
+# Keep build contexts small and reproducible.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/*.tsbuildinfo
+.git
+.env
+.env.*
+!.env.prod.example
+**/.env.local
+npm-debug.log*
+pnpm-debug.log*
+.vscode
+.idea
+caddy_data
+caddy_config

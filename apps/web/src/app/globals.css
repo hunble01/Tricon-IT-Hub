@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --paper: #f4f1ea;
+  --ink: #1b1814;
+  --accent: #1c4a3a;
+  --line: #e6e0d2;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    /* Layered warmth: a faint evergreen glow top-left, honey bloom bottom-right. */
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(900px 600px at 0% -5%, rgba(28, 74, 58, 0.06), transparent 60%),
+      radial-gradient(800px 600px at 100% 105%, rgba(168, 118, 31, 0.05), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  /* Fine grain overlay for tactile, printed-paper depth. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::selection {
+    background: rgba(28, 74, 58, 0.16);
+    color: #12342a;
+  }
+
+  /* Distinctive headings: editorial serif with tightened optical spacing. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display), Georgia, serif;
+    letter-spacing: -0.015em;
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #d7cfbe;
+    border: 3px solid var(--paper);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #c2b9a4;
+  }
+}
+
+@layer components {
+  /* Eyebrow: tiny tracked label above titles. */
+  .eyebrow {
+    @apply font-mono text-[10.5px] font-medium uppercase tracking-[0.22em] text-ink-faint;
+  }
+
+  /* Surface card. */
+  .panel {
+    @apply rounded-card border border-line bg-surface shadow-soft;
+  }
+  .panel-raised {
+    @apply rounded-card border border-line bg-surface-raised shadow-card;
+  }
+
+  /* Inputs & selects. */
+  .field {
+    @apply block w-full rounded-field border border-line bg-surface-raised px-3 py-2 text-sm text-ink
+      shadow-[inset_0_1px_2px_rgba(27,24,20,0.03)] outline-none transition
+      placeholder:text-ink-faint
+      focus:border-accent-bright focus:ring-2 focus:ring-accent/20;
+  }
+  .field-sm {
+    @apply rounded-[8px] border border-line bg-surface-raised px-2.5 py-1.5 text-xs text-ink outline-none transition
+      focus:border-accent-bright focus:ring-2 focus:ring-accent/20;
+  }
+
+  /* Buttons. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-field px-4 py-2 text-sm font-medium transition
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-white shadow-[0_1px_2px_rgba(18,52,42,0.4),inset_0_1px_0_rgba(255,255,255,0.12)]
+      hover:bg-accent-bright active:translate-y-px;
+  }
+  .btn-ghost {
+    @apply btn border border-line bg-surface-raised text-ink hover:border-line-strong hover:bg-paper-deep/40;
+  }
+  .btn-soft {
+    @apply btn bg-accent-wash text-accent-ink hover:bg-accent/10;
+  }
+
+  /* Pill / badge. */
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium;
+  }
+
+  /* Big editorial number. */
+  .numeral {
+    font-family: var(--font-display), Georgia, serif;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: -0.03em;
+  }
+}
+
+@layer utilities {
+  /* Stagger helper: pages set --i on items, animation-delay scales it. */
+  .stagger {
+    animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * 60ms);
+  }
+  .hover-lift {
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-3px);
+  }
+}

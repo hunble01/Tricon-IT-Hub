@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(pnpm *)",
+      "PowerShell(corepack *)",
+      "PowerShell($env:PNPM_HOME = \"$env:USERPROFILE\\\\AppData\\\\Local\\\\pnpm\"; iwr https://get.pnpm.io/install.ps1 -useb | iex)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(npm install *)",
+      "PowerShell(pnpm install *)"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "tricon-it-hub",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @tricon/db generate",
+    "db:migrate": "pnpm --filter @tricon/db migrate",
+    "db:seed": "pnpm --filter @tricon/db seed",
+    "db:import": "pnpm --filter @tricon/db import:onboarding"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.3",
+    "typescript": "^5.5.4"
+  }
+}
