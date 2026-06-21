@@ -11,6 +11,7 @@ import {
 import { AuditService } from "../audit/audit.service";
 import { AuthenticatedUser } from "../auth/types";
 import { PrismaService } from "../prisma/prisma.service";
+import { TasksService } from "../tasks/tasks.service";
 import { StartOffboardingDto, UpdateOffboardingDto } from "./dto";
 
 const MONTH_FMT: Intl.DateTimeFormatOptions = { month: "short", year: "numeric" };
@@ -32,6 +33,7 @@ export class OffboardingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly tasks: TasksService,
   ) {}
 
   async list() {
@@ -104,6 +106,32 @@ export class OffboardingService {
       entityId: offboarding.id,
       metadata: { staffId: staff.id, staffName: staff.fullName, reason: dto.reason },
     });
+
+    // Task-source: seed the todo board with the close-out work for a leaver.
+    await this.tasks.generate(
+      [
+        {
+          sourceKey: `offboarding:${offboarding.id}:collect`,
+          source: "OFFBOARDING",
+          type: "RETURN_DEVICE",
+          title: `Collect devices from ${staff.fullName}`,
+          description: "Reclaim every assigned device and return it to stock.",
+          staffId: staff.id,
+          buildingId: staff.buildingId ?? undefined,
+          dueDate: lastDay,
+        },
+        {
+          sourceKey: `offboarding:${offboarding.id}:revoke`,
+          source: "OFFBOARDING",
+          type: "ACCESS",
+          title: `Disable accounts for ${staff.fullName}`,
+          description: "Disable AD, revoke M365 licences, return badge.",
+          staffId: staff.id,
+          dueDate: lastDay,
+        },
+      ],
+      actor,
+    );
 
     return this.get(offboarding.id);
   }

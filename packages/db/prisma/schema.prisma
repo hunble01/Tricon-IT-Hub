@@ -142,6 +142,45 @@ enum MemoryType {
   NOTE
 }
 
+// Tasks — non-ticket operational work (todo board).
+enum TaskType {
+  INSTALL
+  ASSIGN_DEVICE
+  RETURN_DEVICE
+  REPAIR
+  SETUP
+  ACCESS
+  PROCUREMENT
+  AUDIT
+  ONBOARDING
+  OFFBOARDING
+  OTHER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum TaskSource {
+  MANUAL
+  ONBOARDING
+  OFFBOARDING
+  TICKET
+  INTAKE
+  ASSISTANT
+}
+
 // ────────────────────────────────────────────────────────────
 // Models
 // ────────────────────────────────────────────────────────────
@@ -488,4 +527,53 @@ model InvoiceLineItem {
   createdDeviceIds String[]
 
   @@index([purchaseDocId])
+}
+
+// ────────────────────────────────────────────────────────────
+// Tasks — unified todo board for non-ticket operational work
+// (equipment installs, laptop assign/return, setups, access requests…).
+// Tasks arrive from many sources (onboarding/offboarding/tickets/intake/the AI
+// assistant/manual) via a task-source pattern. Entity refs are plain ids
+// resolved in the service layer (matches §6c/§6d) so this migration stays
+// additive — just one new table.
+// ────────────────────────────────────────────────────────────
+
+model Task {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  type        TaskType     @default(OTHER)
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(NORMAL)
+  source      TaskSource   @default(MANUAL)
+
+  // What the task is about (plain id refs, resolved in the service layer).
+  staffId    String?
+  deviceId   String?
+  buildingId String?
+  ticketId   String?
+
+  // Ownership (plain id refs to User).
+  assigneeId  String?
+  createdById String?
+
+  dueDate     DateTime?
+  completedAt DateTime?
+
+  // Idempotency key for generated tasks: a source upserts by this key so
+  // re-running a generator (e.g. onboarding sync) never duplicates a task.
+  sourceKey String? @unique
+
+  // Calendar sync (MS Graph). Set once the task has been pushed to a calendar.
+  calendarEventId String?
+  calendarSyncedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, priority])
+  @@index([assigneeId, status])
+  @@index([dueDate])
+  @@index([buildingId])
+  @@index([staffId])
 }

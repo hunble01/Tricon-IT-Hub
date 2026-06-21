@@ -22,6 +22,7 @@ import { RolesModule } from "./roles/roles.module";
 import { SiteAuditModule } from "./site-audit/site-audit.module";
 import { SlaModule } from "./sla/sla.module";
 import { StaffModule } from "./staff/staff.module";
+import { TasksModule } from "./tasks/tasks.module";
 import { TicketsModule } from "./tickets/tickets.module";
 
 @Module({
@@ -41,6 +42,7 @@ import { TicketsModule } from "./tickets/tickets.module";
     DevicesModule,
     OnboardingModule,
     OffboardingModule,
+    TasksModule,
     TicketsModule,
     DashboardModule,
     IntakeModule,

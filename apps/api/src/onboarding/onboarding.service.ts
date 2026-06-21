@@ -15,6 +15,7 @@ import { AuthenticatedUser } from "../auth/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { AdPrefixService } from "../staff/ad-prefix.service";
 import { splitName } from "../staff/name";
+import { TasksService } from "../tasks/tasks.service";
 import {
   AssignOnboardingDevicesDto,
   StartOnboardingDto,
@@ -52,6 +53,7 @@ export class OnboardingService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly adPrefix: AdPrefixService,
+    private readonly tasks: TasksService,
   ) {}
 
   async list() {
@@ -154,6 +156,33 @@ export class OnboardingService {
         buildingName: building.name,
       },
     });
+
+    // Task-source: seed the todo board with the hands-on work a new hire needs.
+    await this.tasks.generate(
+      [
+        {
+          sourceKey: `onboarding:${onboarding.id}:provision`,
+          source: "ONBOARDING",
+          type: "SETUP",
+          title: `Provision accounts for ${staff.fullName}`,
+          description: `Create AD account (${adPrefix}) and M365 mailbox/licences for ${role.title} at ${building.name}.`,
+          staffId: staff.id,
+          buildingId: building.id,
+          dueDate: startDate,
+        },
+        {
+          sourceKey: `onboarding:${onboarding.id}:devices`,
+          source: "ONBOARDING",
+          type: "ASSIGN_DEVICE",
+          title: `Assign & deliver devices to ${staff.fullName}`,
+          description: `Prep and hand off the ${role.title} device kit at ${building.name}.`,
+          staffId: staff.id,
+          buildingId: building.id,
+          dueDate: startDate,
+        },
+      ],
+      actor,
+    );
 
     return this.get(onboarding.id);
   }
