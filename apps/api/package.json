@@ -7,7 +7,8 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.spec.ts\""
   },
   "dependencies": {
     "@nestjs/common": "^10.4.4",
@@ -39,6 +40,7 @@
     "ts-loader": "^9.5.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.4"
   }
 }
