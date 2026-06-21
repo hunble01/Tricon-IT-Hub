@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { AlertsModule } from "./alerts/alerts.module";
+import { AssistantModule } from "./assistant/assistant.module";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/jwt-auth.guard";
@@ -52,6 +53,7 @@ import { TicketsModule } from "./tickets/tickets.module";
     SlaModule,
     AlertsModule,
     BriefingModule,
+    AssistantModule,
   ],
   controllers: [HealthController],
   providers: [

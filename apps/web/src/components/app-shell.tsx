@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Menu } from "lucide-react";
+import { AssistantPanel } from "@/components/assistant-panel";
 import { AuthGuard } from "@/components/auth-guard";
 import { Sidebar } from "@/components/sidebar";
 import type { SessionUser } from "@/lib/session";
@@ -43,6 +44,7 @@ function ShellBody({ user, eyebrow, title, actions, children }: Props & { user: 
           {children(user)}
         </main>
       </div>
+      <AssistantPanel />
     </div>
   );
 }
