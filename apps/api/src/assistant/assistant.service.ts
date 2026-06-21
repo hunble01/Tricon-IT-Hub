@@ -4,6 +4,7 @@ import { AuthenticatedUser } from "../auth/types";
 import { DevicesService } from "../devices/devices.service";
 import { LlmService } from "../llm/llm.service";
 import { PiiService } from "../llm/pii.service";
+import { MemoryService } from "../memory/memory.service";
 import { OffboardingService } from "../offboarding/offboarding.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StaffService } from "../staff/staff.service";
@@ -36,6 +37,7 @@ export class AssistantService {
     private readonly devices: DevicesService,
     private readonly staff: StaffService,
     private readonly offboarding: OffboardingService,
+    private readonly memory: MemoryService,
   ) {}
 
   // ---- chat (agent loop) --------------------------------------------
@@ -162,6 +164,10 @@ export class AssistantService {
       }
       case "list_tasks":
         return (await this.tasks.list({ status: str(a.status) as never, q: str(a.query) })).slice(0, 20);
+      case "recall_history": {
+        const hits = await this.memory.recall(str(a.query) ?? "", { limit: 5 });
+        return hits.map((h) => ({ type: h.type, score: Number(h.score.toFixed(3)), content: h.content.slice(0, 600) }));
+      }
       case "summary": {
         const [staffCount, inStock, taskStats, onboardings] = await Promise.all([
           this.prisma.staff.count(),

@@ -16,7 +16,8 @@
     "studio": "dotenv -e ../../.env -- prisma studio",
     "seed": "dotenv -e ../../.env -- tsx scripts/seed.ts",
     "import:onboarding": "dotenv -e ../../.env -- tsx scripts/import-onboarding.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo": "dotenv -e ../../.env -- tsx scripts/demo-seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

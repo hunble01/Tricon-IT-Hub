@@ -14,6 +14,10 @@ import {
   Brain,
   AlertTriangle,
   ChevronRight,
+  DollarSign,
+  PackageCheck,
+  ListChecks,
+  CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -51,15 +55,26 @@ interface AlertsBrief {
   digest: string;
 }
 
+interface Overview {
+  fleet: { value: number; total: number; inStock: number; assigned: number };
+  tasks: { open: number; overdue: number; dueToday: number };
+  people: { active: number; onboarding: number };
+  tickets: { open: number; slaAtRisk: number };
+  buildingsLive: number;
+  attention: Array<{ kind: string; count: number; label: string; href: string }>;
+}
+
 function Dashboard({ firstName }: { firstName: string }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [alerts, setAlerts] = useState<AlertsBrief | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
 
   useEffect(() => {
     api<Summary>("/dashboard/summary").then(setSummary).catch(() => setSummary(null));
     api<Activity[]>("/dashboard/activity?limit=14").then(setActivity).catch(() => setActivity([]));
     api<AlertsBrief>("/alerts").then(setAlerts).catch(() => setAlerts(null));
+    api<Overview>("/dashboard/overview").then(setOverview).catch(() => setOverview(null));
   }, []);
 
   const pending = summary?.onboardings.byDeviceStatus.PENDING ?? 0;
@@ -75,7 +90,10 @@ function Dashboard({ firstName }: { firstName: string }) {
         open={open}
       />
 
+      {overview && overview.attention.length > 0 && <AttentionStrip items={overview.attention} />}
       {alerts && alerts.summary.total > 0 && <AlertsBanner data={alerts} />}
+
+      <CommandCenter overview={overview} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi
@@ -116,6 +134,103 @@ function Dashboard({ firstName }: { firstName: string }) {
         <ActivityFeed items={activity} />
         <Library catalog={summary?.catalog} />
       </div>
+    </div>
+  );
+}
+
+function AttentionStrip({ items }: { items: Array<{ kind: string; count: number; label: string; href: string }> }) {
+  return (
+    <div className="stagger flex flex-wrap items-center gap-2 rounded-card border border-honey/30 bg-honey-wash px-4 py-3">
+      <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-honey">
+        <AlertTriangle size={14} /> Needs attention
+      </span>
+      {items.map((it) => (
+        <Link
+          key={it.kind}
+          href={it.href}
+          className="group inline-flex items-center gap-1.5 rounded-full border border-honey/30 bg-surface px-3 py-1 text-xs text-ink transition hover:border-honey"
+        >
+          <span className="numeral font-semibold text-clay">{it.count}</span> {it.label}
+          <ChevronRight size={12} className="text-ink-faint transition group-hover:translate-x-0.5" />
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function money(n: number): string {
+  return n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`;
+}
+
+function CommandCenter({ overview }: { overview: Overview | null }) {
+  const stats: Array<{ icon: LucideIcon; label: string; value: string; sub?: string; tone: Tone; href: string }> = [
+    {
+      icon: DollarSign,
+      label: "Fleet value",
+      value: overview ? money(overview.fleet.value) : "—",
+      sub: overview ? `${overview.fleet.total} devices` : undefined,
+      tone: "success",
+      href: "/devices",
+    },
+    {
+      icon: PackageCheck,
+      label: "In stock",
+      value: overview ? String(overview.fleet.inStock) : "—",
+      sub: overview ? `${overview.fleet.assigned} assigned` : undefined,
+      tone: "info",
+      href: "/devices",
+    },
+    {
+      icon: ListChecks,
+      label: "Open tasks",
+      value: overview ? String(overview.tasks.open) : "—",
+      sub: overview && overview.tasks.overdue > 0 ? `${overview.tasks.overdue} overdue` : "on track",
+      tone: overview && overview.tasks.overdue > 0 ? "danger" : "neutral",
+      href: "/tasks",
+    },
+    {
+      icon: CalendarClock,
+      label: "Due today",
+      value: overview ? String(overview.tasks.dueToday) : "—",
+      tone: "warn",
+      href: "/tasks",
+    },
+    {
+      icon: UserPlus,
+      label: "Onboarding",
+      value: overview ? String(overview.people.onboarding) : "—",
+      sub: overview ? `${overview.people.active} active` : undefined,
+      tone: "accent",
+      href: "/onboarding",
+    },
+    {
+      icon: Ticket,
+      label: "Open tickets",
+      value: overview ? String(overview.tickets.open) : "—",
+      sub: overview && overview.tickets.slaAtRisk > 0 ? `${overview.tickets.slaAtRisk} past SLA` : undefined,
+      tone: overview && overview.tickets.slaAtRisk > 0 ? "danger" : "neutral",
+      href: "/tickets",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {stats.map((s, i) => {
+        const Icon = s.icon;
+        return (
+          <Link
+            key={s.label}
+            href={s.href}
+            className="stagger hover-lift rounded-card border border-line bg-surface p-3.5 shadow-soft"
+            style={{ ["--i" as string]: i }}
+          >
+            <Icon size={16} className="text-ink-faint" />
+            <div className="numeral mt-2 text-2xl font-semibold leading-none text-ink">{s.value}</div>
+            <div className="mt-1 text-[11px] font-medium text-ink-soft">{s.label}</div>
+            {s.sub && <Pill tone={s.tone} className="mt-1.5">{s.sub}</Pill>}
+          </Link>
+        );
+      })}
     </div>
   );
 }

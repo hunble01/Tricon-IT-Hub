@@ -12,6 +12,7 @@ import {
   ListChecks,
   SlidersHorizontal,
   Sparkles,
+  MessageCircleQuestion,
   Receipt,
   ClipboardCheck,
   Plug,
@@ -28,6 +29,7 @@ const AUTH_DISABLED = process.env.NEXT_PUBLIC_AUTH_DISABLED === "true";
 
 const NAV: Array<{ href: string; label: string; icon: LucideIcon; accent?: boolean }> = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/ask", label: "Ask the Hub", icon: MessageCircleQuestion, accent: true },
   { href: "/briefing", label: "Daily Briefing", icon: Newspaper },
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/intake", label: "Smart Intake", icon: Sparkles, accent: true },

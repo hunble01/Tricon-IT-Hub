@@ -44,6 +44,12 @@ export const TOOLS: ToolDef[] = [
     description: "Get a quick operational summary: counts of staff, devices in stock, open tasks, active onboardings.",
     args: `{}`,
   },
+  {
+    name: "recall_history",
+    kind: "read",
+    description: "Search past tickets, resolutions and KB articles for how similar issues were handled before. Use for 'what did we do last time…' / 'how do we usually fix…' questions.",
+    args: `{ "query": string }`,
+  },
   // ---- writes (require confirmation) ----
   {
     name: "create_task",

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { DevicesModule } from "../devices/devices.module";
+import { MemoryModule } from "../memory/memory.module";
 import { OffboardingModule } from "../offboarding/offboarding.module";
 import { StaffModule } from "../staff/staff.module";
 import { TasksModule } from "../tasks/tasks.module";
@@ -8,7 +9,7 @@ import { AssistantService } from "./assistant.service";
 import { TranscriptionService } from "./transcription.service";
 
 @Module({
-  imports: [TasksModule, DevicesModule, StaffModule, OffboardingModule],
+  imports: [TasksModule, DevicesModule, StaffModule, OffboardingModule, MemoryModule],
   controllers: [AssistantController],
   providers: [AssistantService, TranscriptionService],
 })

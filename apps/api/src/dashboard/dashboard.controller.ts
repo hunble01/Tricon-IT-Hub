@@ -10,6 +10,11 @@ export class DashboardController {
     return this.svc.summary();
   }
 
+  @Get("overview")
+  overview() {
+    return this.svc.overview();
+  }
+
   @Get("activity")
   activity(@Query("limit", new DefaultValuePipe(20), ParseIntPipe) limit: number) {
     return this.svc.recentActivity(Math.min(Math.max(limit, 1), 100));
