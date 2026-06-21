@@ -46,6 +46,11 @@ export class TasksController {
     return this.svc.update(id, dto, actor);
   }
 
+  @Post(":id/calendar")
+  syncToCalendar(@Param("id") id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.svc.syncToCalendar(id, actor);
+  }
+
   @Delete(":id")
   remove(@Param("id") id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.svc.remove(id, actor);

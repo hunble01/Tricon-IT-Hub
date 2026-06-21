@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, Task, TaskSource, TaskStatus, TaskType } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { AuthenticatedUser } from "../auth/types";
+import { CalendarService } from "../calendar/calendar.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTaskDto, ListTasksQueryDto, UpdateTaskDto } from "./dto";
 
@@ -26,6 +27,7 @@ export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly calendar: CalendarService,
   ) {}
 
   // ---- reads ---------------------------------------------------------
@@ -145,6 +147,32 @@ export class TasksService {
       entityId: id,
     });
     return { deleted: true };
+  }
+
+  /** Push a due task onto the agent's calendar (MS Graph) and record the event. */
+  async syncToCalendar(id: string, actor: AuthenticatedUser) {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) throw new NotFoundException("Task not found");
+    if (!task.dueDate) throw new BadRequestException("Task needs a due date to add to a calendar");
+
+    const result = await this.calendar.createEvent({
+      title: task.title,
+      description: task.description,
+      date: task.dueDate,
+    });
+
+    await this.prisma.task.update({
+      where: { id },
+      data: { calendarEventId: result.eventId, calendarSyncedAt: new Date() },
+    });
+    await this.audit.record({
+      action: "task.calendar.sync",
+      userId: actor.userId,
+      entityType: "Task",
+      entityId: id,
+      metadata: { eventId: result.eventId, mode: result.mode },
+    });
+    return { ...result, task: await this.get(id) };
   }
 
   // ---- task-source generation ---------------------------------------

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Plus, Trash2, X } from "lucide-react";
+import { CalendarCheck, CalendarClock, CalendarPlus, Plus, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Pill, ErrorNote, type Tone } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
@@ -27,6 +27,7 @@ interface Task {
   source: Source;
   dueDate: string | null;
   overdue: boolean;
+  calendarEventId: string | null;
   staff: { id: string; fullName: string } | null;
   device: { id: string; type: string; model: string | null; assetTag: string | null } | null;
   building: { id: string; name: string } | null;
@@ -198,6 +199,15 @@ function TaskCard({ task, onChange }: { task: Task; onChange: () => void }) {
       setBusy(false);
     }
   }
+  async function addToCalendar() {
+    setBusy(true);
+    try {
+      await api(`/tasks/${task.id}/calendar`, { method: "POST" });
+      onChange();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className={cn("panel space-y-2 p-3 transition", busy && "opacity-50")}>
@@ -247,6 +257,26 @@ function TaskCard({ task, onChange }: { task: Task; onChange: () => void }) {
           <option value="DONE">Done</option>
           <option value="CANCELLED">Cancelled</option>
         </select>
+        {task.dueDate && (
+          task.calendarEventId ? (
+            <span
+              title="On your calendar"
+              className="flex h-7 w-7 items-center justify-center rounded-[8px] text-accent"
+            >
+              <CalendarCheck size={15} />
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={addToCalendar}
+              disabled={busy}
+              title="Add to calendar"
+              className="flex h-7 w-7 items-center justify-center rounded-[8px] border border-line text-ink-soft transition hover:bg-paper-deep"
+            >
+              <CalendarPlus size={15} />
+            </button>
+          )
+        )}
       </div>
     </div>
   );
