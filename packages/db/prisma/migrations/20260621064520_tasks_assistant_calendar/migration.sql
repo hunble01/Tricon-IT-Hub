@@ -10,21 +10,11 @@ CREATE TYPE "TaskPriority" AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT');
 -- CreateEnum
 CREATE TYPE "TaskSource" AS ENUM ('MANUAL', 'ONBOARDING', 'OFFBOARDING', 'TICKET', 'INTAKE', 'ASSISTANT');
 
--- DropIndex
-DROP INDEX "MemoryEntry_embedding_hnsw_idx";
-
--- DropIndex
-DROP INDEX "Staff_firstName_trgm_idx";
-
--- DropIndex
-DROP INDEX "Staff_fullName_trgm_idx";
-
--- DropIndex
-DROP INDEX "Staff_lastName_trgm_idx";
-
--- AlterTable
-ALTER TABLE "InvoiceLineItem" ALTER COLUMN "serialNumbers" DROP DEFAULT,
-ALTER COLUMN "createdDeviceIds" DROP DEFAULT;
+-- NOTE: `prisma migrate dev` also emitted DROP INDEX statements for the raw-SQL
+-- pgvector HNSW + Staff pg_trgm indexes (it can't see raw indexes in the schema)
+-- and an unrelated InvoiceLineItem default change. Those were REMOVED by hand —
+-- this migration is intentionally additive (Task table only) and must never drop
+-- the recall/search indexes that earlier raw migrations created.
 
 -- CreateTable
 CREATE TABLE "Task" (
