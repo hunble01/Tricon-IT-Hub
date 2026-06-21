@@ -1,12 +1,12 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, MapPin, Receipt } from "lucide-react";
+import { ArrowLeft, MapPin, Pencil, Receipt, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { Pill, SectionCard, deviceBadge } from "@/components/ui";
-import { api } from "@/lib/api";
+import { Pill, SectionCard, ErrorNote, deviceBadge } from "@/components/ui";
+import { api, ApiError } from "@/lib/api";
 
 interface Assignment {
   id: string;
@@ -30,14 +30,18 @@ interface DeviceDetail {
   assignments: Assignment[];
 }
 
+interface Building { id: string; name: string }
+
 export default function DeviceDetailPage() {
   const params = useParams<{ id: string }>();
   const [device, setDevice] = useState<DeviceDetail | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     if (!params.id) return;
-    api<DeviceDetail>(`/devices/${params.id}`).then(setDevice);
+    void api<DeviceDetail>(`/devices/${params.id}`).then(setDevice);
   }, [params.id]);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   return (
     <AppShell eyebrow="Inventory · Asset" title={device ? `${device.type}` : "Device"}>
@@ -45,7 +49,7 @@ export default function DeviceDetailPage() {
         !device ? (
           <div className="panel px-5 py-12 text-center text-sm text-ink-soft">Loading…</div>
         ) : (
-          <Detail device={device} />
+          <Detail device={device} onSaved={refresh} />
         )
       }
     </AppShell>
@@ -64,9 +68,10 @@ function duration(a: string, b: string | null): string {
   return days === 0 ? "today" : days === 1 ? "1 day" : `${days} days`;
 }
 
-function Detail({ device }: { device: DeviceDetail }) {
+function Detail({ device, onSaved }: { device: DeviceDetail; onSaved: () => void }) {
   const badge = deviceBadge(device.status);
   const open = device.assignments.find((a) => !a.returnedAt);
+  const [editing, setEditing] = useState(false);
 
   return (
     <div className="space-y-5">
@@ -79,7 +84,22 @@ function Detail({ device }: { device: DeviceDetail }) {
         <Pill tone={badge.tone} dot>{badge.label}</Pill>
         {device.assetTag && <span className="font-mono text-xs text-ink-soft">#{device.assetTag}</span>}
         {device.serialNumber && <span className="font-mono text-xs text-ink-faint">SN {device.serialNumber}</span>}
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="ml-auto inline-flex items-center gap-1.5 rounded-field border border-line px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-paper-deep"
+        >
+          {editing ? <X size={14} /> : <Pencil size={14} />}
+          {editing ? "Close" : "Edit"}
+        </button>
       </div>
+
+      {editing && (
+        <EditDeviceForm
+          device={device}
+          onSaved={() => { setEditing(false); onSaved(); }}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SectionCard title="Current status" bodyClassName="px-5 py-4">
@@ -142,6 +162,103 @@ function Detail({ device }: { device: DeviceDetail }) {
         )}
       </SectionCard>
     </div>
+  );
+}
+
+const STATUS_OPTIONS = [
+  "IN_STOCK", "ASSIGNED", "RETURNED", "IN_REPAIR", "RETIRED", "MISSING", "MISPLACED", "OFFSITE",
+];
+
+function EditDeviceForm({ device, onSaved }: { device: DeviceDetail; onSaved: () => void }) {
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [model, setModel] = useState(device.model ?? "");
+  const [assetTag, setAssetTag] = useState(device.assetTag ?? "");
+  const [serialNumber, setSerialNumber] = useState(device.serialNumber ?? "");
+  const [status, setStatus] = useState(device.status);
+  const [locationId, setLocationId] = useState(device.location?.id ?? "");
+  const [purchaseCost, setPurchaseCost] = useState(device.purchaseCost != null ? String(device.purchaseCost) : "");
+  const [purchaseDate, setPurchaseDate] = useState(device.purchaseDate ? device.purchaseDate.slice(0, 10) : "");
+  const [notes, setNotes] = useState(device.notes ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api<Building[]>("/buildings").then(setBuildings).catch(() => setBuildings([]));
+  }, []);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/devices/${device.id}`, {
+        method: "PATCH",
+        body: {
+          model: model.trim() || null,
+          assetTag: assetTag.trim() || undefined,
+          serialNumber: serialNumber.trim() || undefined,
+          status,
+          locationId: locationId || null,
+          purchaseCost: purchaseCost.trim() === "" ? null : Number(purchaseCost),
+          purchaseDate: purchaseDate || null,
+          notes: notes.trim() || undefined,
+        },
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SectionCard title="Edit device" bodyClassName="space-y-3 px-5 py-4">
+      {error && <ErrorNote>{error}</ErrorNote>}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <LabeledField label="Model">
+          <input value={model} onChange={(e) => setModel(e.target.value)} className="field w-full" placeholder="e.g. Latitude 5450" />
+        </LabeledField>
+        <LabeledField label="Status">
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className="field w-full">
+            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ").toLowerCase()}</option>)}
+          </select>
+        </LabeledField>
+        <LabeledField label="Asset tag">
+          <input value={assetTag} onChange={(e) => setAssetTag(e.target.value)} className="field w-full" />
+        </LabeledField>
+        <LabeledField label="Serial number">
+          <input value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} className="field w-full" />
+        </LabeledField>
+        <LabeledField label="Location">
+          <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="field w-full">
+            <option value="">— none —</option>
+            {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </LabeledField>
+        <LabeledField label="Purchase cost ($)">
+          <input type="number" min="0" step="0.01" value={purchaseCost} onChange={(e) => setPurchaseCost(e.target.value)} className="field w-full" />
+        </LabeledField>
+        <LabeledField label="Purchase date">
+          <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="field w-full" />
+        </LabeledField>
+      </div>
+      <LabeledField label="Notes">
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="field w-full resize-none" />
+      </LabeledField>
+      <div className="flex justify-end">
+        <button type="button" disabled={busy} onClick={save} className="btn-primary">
+          {busy ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+    </SectionCard>
+  );
+}
+
+function LabeledField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-ink-faint">{label}</span>
+      {children}
+    </label>
   );
 }
 

@@ -74,7 +74,10 @@ export class DevicesService {
   }
 
   async create(dto: CreateDeviceDto, actor: AuthenticatedUser) {
-    const created = await this.prisma.device.create({ data: dto });
+    const { purchaseDate, ...rest } = dto;
+    const created = await this.prisma.device.create({
+      data: { ...rest, purchaseDate: purchaseDate ? new Date(purchaseDate) : undefined },
+    });
     await this.audit.record({
       action: "device.create",
       userId: actor.userId,
@@ -95,7 +98,14 @@ export class DevicesService {
       notes: dto.notes,
       // Updates §6a — provenance is editable after creation.
       purchaseCost: dto.purchaseCost,
-      purchaseDate: dto.purchaseDate,
+      // Date-only strings ("2026-05-15") pass @IsDateString but Prisma needs a
+      // full DateTime — coerce. undefined = leave; null = clear.
+      purchaseDate:
+        dto.purchaseDate === undefined
+          ? undefined
+          : dto.purchaseDate
+            ? new Date(dto.purchaseDate)
+            : null,
       purchaseLocationId: dto.purchaseLocationId,
     };
     if (dto.locationId !== undefined) {
