@@ -105,6 +105,7 @@ async function ensureTicket(p: {
   priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
   slaOffsetDays?: number;
   resolution?: string;
+  requesterStaffId?: string;
 }) {
   const ticket = await prisma.ticket.upsert({
     where: { source_externalId: { source: "MANUAL", externalId: p.externalId } },
@@ -116,6 +117,7 @@ async function ensureTicket(p: {
       body: p.body,
       status: p.status,
       priority: p.priority ?? "NORMAL",
+      requesterStaffId: p.requesterStaffId,
       slaDueAt: p.slaOffsetDays != null ? daysFromNow(p.slaOffsetDays) : null,
     },
   });
@@ -169,6 +171,8 @@ async function main() {
     amelia: await ensureStaff({ fullName: "Amelia Chen", role: "Property Manager", building: "The Taylor" }),
     marcus: await ensureStaff({ fullName: "Marcus Bell", role: "Leasing Consultant", building: "The Ivy" }),
     priya: await ensureStaff({ fullName: "Priya Nair", role: "Resident Experience Manager", building: "The Selby" }),
+    selby2: await ensureStaff({ fullName: "Ethan Brooks", role: "Leasing Consultant", building: "The Selby" }),
+    selby3: await ensureStaff({ fullName: "Maya Patel", role: "Property Administrator", building: "The Selby" }),
     diego: await ensureStaff({ fullName: "Diego Santos", role: "Maintenance Technician", building: "Cherry House" }),
     hannah: await ensureStaff({ fullName: "Hannah Wright", role: "Property Administrator", building: "The James" }),
     omar: await ensureStaff({ fullName: "Omar Haddad", role: "Maintenance Manager", building: "Maple House" }),
@@ -233,7 +237,13 @@ async function main() {
   await ensureTicket({ externalId: "DEMO-T-004", subject: "Second monitor request for leasing desk", body: "Could we get a second monitor for tour scheduling?", status: "OPEN", priority: "NORMAL", slaOffsetDays: 2 });
   await ensureTicket({ externalId: "DEMO-T-005", subject: "Laptop running very slow after update", body: "Since the latest Windows update the Latitude is crawling.", status: "PENDING", priority: "HIGH", slaOffsetDays: 1 });
   await ensureTicket({ externalId: "DEMO-T-006", subject: "URGENT: concierge desk phone is dead", body: "The shared concierge phone at Cherry House has no dial tone.", status: "OPEN", priority: "URGENT", slaOffsetDays: -1 }); // past SLA
-  console.log("[demo] tickets + recall memory ready");
+
+  // A CLUSTER — three uniFLOW printing tickets at The Selby in two days. Pattern
+  // detection should surface these as one likely print-server issue, not three.
+  await ensureTicket({ externalId: "DEMO-T-007", subject: "Can't print at The Selby — secure print stuck", body: "uniFLOW secure print at the leasing desk just spins and never releases. Tried re-logging in, no luck.", status: "OPEN", priority: "HIGH", slaOffsetDays: 1, requesterStaffId: staff.priya.id });
+  await ensureTicket({ externalId: "DEMO-T-008", subject: "uniFLOW secure print not releasing at The Selby", body: "uniFLOW secure print at The Selby is stuck — jobs won't release and nothing prints at the leasing desk. Same issue as yesterday.", status: "OPEN", priority: "NORMAL", slaOffsetDays: 1, requesterStaffId: staff.selby2.id });
+  await ensureTicket({ externalId: "DEMO-T-009", subject: "uniFLOW print release failing — Selby", body: "Secure print release errors out for everyone at the front desk. Can't print resident notices.", status: "OPEN", priority: "HIGH", slaOffsetDays: 0, requesterStaffId: staff.selby3.id });
+  console.log("[demo] tickets + recall memory + pattern cluster ready");
 
   // ---- tasks (varied statuses + due dates) ----
   await ensureTask({ key: "demo:task:1", title: "Image 4 loaner laptops for The Taylor", type: "SETUP", priority: "HIGH", status: "IN_PROGRESS", dueOffsetDays: 0, buildingId: await buildingId("The Taylor") }); // due today
