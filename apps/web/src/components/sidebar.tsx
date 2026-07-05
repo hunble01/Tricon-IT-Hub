@@ -29,24 +29,46 @@ import { Wordmark } from "./logo";
 
 const AUTH_DISABLED = process.env.NEXT_PUBLIC_AUTH_DISABLED === "true";
 
-const NAV: Array<{ href: string; label: string; icon: LucideIcon; accent?: boolean }> = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/ask", label: "Ask the Hub", icon: MessageCircleQuestion, accent: true },
-  { href: "/patterns", label: "Patterns", icon: Radar },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
-  { href: "/briefing", label: "Daily Briefing", icon: Newspaper },
-  { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/intake", label: "Smart Intake", icon: Sparkles, accent: true },
-  { href: "/tasks", label: "Tasks", icon: ListChecks },
-  { href: "/staff", label: "Staff", icon: Users },
-  { href: "/devices", label: "Devices", icon: Laptop },
-  { href: "/procurement", label: "Procurement", icon: Receipt },
-  { href: "/audit", label: "Site Audit", icon: ClipboardCheck },
-  { href: "/onboarding", label: "Onboarding", icon: UserPlus },
-  { href: "/offboarding", label: "Offboarding", icon: UserMinus },
-  { href: "/tickets", label: "Tickets", icon: Ticket },
-  { href: "/connections", label: "Connections", icon: Plug },
-  { href: "/admin", label: "Admin", icon: SlidersHorizontal },
+type NavItem = { href: string; label: string; icon: LucideIcon; accent?: boolean };
+
+const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
+  {
+    label: "Workspace",
+    items: [
+      { href: "/", label: "Overview", icon: LayoutDashboard },
+      { href: "/ask", label: "Ask the Hub", icon: MessageCircleQuestion, accent: true },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { href: "/patterns", label: "Patterns", icon: Radar },
+      { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
+      { href: "/briefing", label: "Daily Briefing", icon: Newspaper },
+      { href: "/alerts", label: "Alerts", icon: Bell },
+      { href: "/intake", label: "Smart Intake", icon: Sparkles, accent: true },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/tasks", label: "Tasks", icon: ListChecks },
+      { href: "/tickets", label: "Tickets", icon: Ticket },
+      { href: "/staff", label: "Staff", icon: Users },
+      { href: "/devices", label: "Devices", icon: Laptop },
+      { href: "/onboarding", label: "Onboarding", icon: UserPlus },
+      { href: "/offboarding", label: "Offboarding", icon: UserMinus },
+    ],
+  },
+  {
+    label: "Assets & Admin",
+    items: [
+      { href: "/procurement", label: "Procurement", icon: Receipt },
+      { href: "/audit", label: "Site Audit", icon: ClipboardCheck },
+      { href: "/connections", label: "Connections", icon: Plug },
+      { href: "/admin", label: "Admin", icon: SlidersHorizontal },
+    ],
+  },
 ];
 
 function initials(name: string): string {
@@ -95,40 +117,44 @@ export function Sidebar({
           </Link>
         </div>
 
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
-          <p className="eyebrow px-3 pb-2 pt-2">Workspace</p>
-          {NAV.map((item) => {
-            const active =
-              pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                className={cn(
-                  "group relative flex items-center gap-3 rounded-field px-3 py-2 text-sm transition",
-                  active
-                    ? "bg-accent-wash font-medium text-accent-ink"
-                    : "text-ink-soft hover:bg-paper-deep/50 hover:text-ink",
-                )}
-              >
-              {active && (
-                <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent" />
-              )}
-              <Icon
-                size={17}
-                strokeWidth={2}
-                className={cn(
-                  "transition",
-                  active ? "text-accent" : "text-ink-faint group-hover:text-ink-soft",
-                )}
-              />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+        <nav className="flex-1 space-y-4 overflow-y-auto px-3">
+          {NAV_SECTIONS.map((section) => (
+            <div key={section.label} className="space-y-0.5">
+              <p className="eyebrow px-3 pb-1 pt-2">{section.label}</p>
+              {section.items.map((item) => {
+                const active =
+                  pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onClose}
+                    className={cn(
+                      "group relative flex items-center gap-3 rounded-field px-3 py-2 text-sm transition",
+                      active
+                        ? "bg-accent-wash font-medium text-accent-ink"
+                        : "text-ink-soft hover:bg-paper-deep/50 hover:text-ink",
+                    )}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent" />
+                    )}
+                    <Icon
+                      size={17}
+                      strokeWidth={2}
+                      className={cn(
+                        "transition",
+                        active ? "text-accent" : "text-ink-faint group-hover:text-ink-soft",
+                      )}
+                    />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
 
       <div className="space-y-3 p-3">
         {AUTH_DISABLED && (

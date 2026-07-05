@@ -39,3 +39,8 @@ export class AssignTicketDto {
   @IsOptional() @IsString()
   userId?: string;
 }
+
+export class LinkRequesterDto {
+  @IsString()
+  staffId!: string;
+}

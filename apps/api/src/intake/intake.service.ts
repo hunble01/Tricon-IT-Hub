@@ -1,16 +1,39 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Building, DeviceType, Role } from "@prisma/client";
+import { Building, DeviceType, Prisma, Role } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { AuthenticatedUser } from "../auth/types";
 import { DevicesService } from "../devices/devices.service";
 import { LlmService } from "../llm/llm.service";
+import { PiiService } from "../llm/pii.service";
 import { OnboardingService } from "../onboarding/onboarding.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { splitName, normalize } from "../staff/name";
+import { StaffMatcherService } from "../staff/staff-matcher.service";
 import { StaffService } from "../staff/staff.service";
 import { AnalyzeIntakeDto, CommitIntakeDto, IntakeHint } from "./dto";
 
+export interface PossibleDuplicate {
+  staffId: string;
+  fullName: string;
+  similarity: number;
+}
+
 type IntakeKind = "NEW_HIRE" | "DEVICES" | "STAFF" | "UNKNOWN";
+
+export type IntakeSegmentKind = "TICKET" | "NEW_HIRE" | "STAFF" | "DEVICES" | "INVOICE" | "TASK" | "UNKNOWN";
+const SEGMENT_KINDS: IntakeSegmentKind[] = ["TICKET", "NEW_HIRE", "STAFF", "DEVICES", "INVOICE", "TASK", "UNKNOWN"];
+
+export interface IntakeSegment {
+  text: string;
+  kind: IntakeSegmentKind;
+  summary: string;
+  requesterNameGuess: string | null;
+}
+
+export interface ClassifyResult {
+  source: "ai" | "basic";
+  segments: IntakeSegment[];
+}
 
 interface RawExtraction {
   kind: IntakeKind;
@@ -33,6 +56,7 @@ export interface AnalyzeResult {
     startDate: string | null;
     adPrefix: string | null;
     unresolved: string[];
+    possibleDuplicate: PossibleDuplicate | null;
   }>;
   devices: Array<{
     type: DeviceType;
@@ -49,6 +73,7 @@ export interface AnalyzeResult {
     buildingId: string | null;
     email: string | null;
     phone: string | null;
+    possibleDuplicate: PossibleDuplicate | null;
   }>;
 }
 
@@ -98,7 +123,9 @@ export class IntakeService {
     private readonly onboarding: OnboardingService,
     private readonly devices: DevicesService,
     private readonly staff: StaffService,
+    private readonly staffMatcher: StaffMatcherService,
     private readonly audit: AuditService,
+    private readonly pii: PiiService,
   ) {}
 
   async analyze(dto: AnalyzeIntakeDto): Promise<AnalyzeResult> {
@@ -123,30 +150,86 @@ export class IntakeService {
     return this.resolve(raw, roles, buildings, source);
   }
 
+  /**
+   * Split a pasted blob into independent topical segments and classify each
+   * one (TICKET/NEW_HIRE/STAFF/DEVICES/INVOICE/TASK/UNKNOWN) — the "universal
+   * paste box" front door. Each segment is later analyzed/extracted and
+   * committed through the existing kind-specific flow (Intake analyze/commit,
+   * Procurement extract/process, Tickets preview/draft, Tasks create); this
+   * method only decides what's in the paste and where it should go.
+   */
+  async classify(rawText: string): Promise<ClassifyResult> {
+    const [roles, buildings] = await Promise.all([
+      this.prisma.role.findMany(),
+      this.prisma.building.findMany(),
+    ]);
+
+    if (this.llm.providerName !== "stub") {
+      try {
+        const segments = await this.llmClassify(rawText, roles, buildings);
+        if (segments.length) return { source: "ai", segments };
+      } catch (err) {
+        this.logger.warn(`LLM classify failed, using basic parser: ${(err as Error).message}`);
+      }
+    }
+    return { source: "basic", segments: heuristicClassify(rawText) };
+  }
+
+  /**
+   * Commit is best-effort per record, not all-or-nothing: the three groups
+   * (onboardings/staff/devices) are unrelated entities from one heterogeneous
+   * paste, so one bad row (e.g. a duplicate assetTag) shouldn't roll back
+   * everything else in the batch. Every row is tried, every failure is caught
+   * and reported back — nothing 500s and silently half-commits anymore.
+   */
   async commit(dto: CommitIntakeDto, actor: AuthenticatedUser) {
     const created = { onboardings: 0, staff: 0, devices: 0 };
+    const duplicatesSkipped: Array<{ fullName: string; existingStaffId: string; similarity: number }> = [];
+    const errors: Array<{ kind: "newHire" | "staff" | "device"; label: string; message: string }> = [];
 
     for (const h of dto.newHires ?? []) {
-      await this.onboarding.start(
-        { fullName: h.fullName, roleId: h.roleId, buildingId: h.buildingId, startDate: h.startDate },
-        actor,
-      );
-      created.onboardings++;
+      if (!h.confirmDuplicate) {
+        const dupe = await this.findConfirmedDuplicate(h.fullName);
+        if (dupe) {
+          duplicatesSkipped.push({ fullName: h.fullName, existingStaffId: dupe.staffId, similarity: dupe.similarity });
+          continue;
+        }
+      }
+      try {
+        await this.onboarding.start(
+          { fullName: h.fullName, roleId: h.roleId, buildingId: h.buildingId, startDate: h.startDate },
+          actor,
+        );
+        created.onboardings++;
+      } catch (err) {
+        errors.push({ kind: "newHire", label: h.fullName, message: this.friendlyError(err) });
+      }
     }
 
     for (const s of dto.staff ?? []) {
-      await this.staff.create(
-        {
-          fullName: s.fullName,
-          roleId: s.roleId,
-          buildingId: s.buildingId,
-          email: s.email,
-          phone: s.phone,
-          source: "MANUAL",
-        },
-        actor,
-      );
-      created.staff++;
+      if (!s.confirmDuplicate) {
+        const dupe = await this.findConfirmedDuplicate(s.fullName);
+        if (dupe) {
+          duplicatesSkipped.push({ fullName: s.fullName, existingStaffId: dupe.staffId, similarity: dupe.similarity });
+          continue;
+        }
+      }
+      try {
+        await this.staff.create(
+          {
+            fullName: s.fullName,
+            roleId: s.roleId,
+            buildingId: s.buildingId,
+            email: s.email,
+            phone: s.phone,
+            source: "MANUAL",
+          },
+          actor,
+        );
+        created.staff++;
+      } catch (err) {
+        errors.push({ kind: "staff", label: s.fullName, message: this.friendlyError(err) });
+      }
     }
 
     for (const d of dto.devices ?? []) {
@@ -156,11 +239,16 @@ export class IntakeService {
         const assetTag = d.assetTag ? (qty > 1 ? `${d.assetTag}-${i + 1}` : d.assetTag) : undefined;
         // Only carry an individual serial when a single unit is created.
         const serialNumber = qty === 1 ? d.serialNumber || undefined : undefined;
-        await this.devices.create(
-          { type, model: d.model || undefined, serialNumber, assetTag, locationId: d.locationId || undefined },
-          actor,
-        );
-        created.devices++;
+        const label = assetTag ?? `${d.model ?? type} (unit ${i + 1}/${qty})`;
+        try {
+          await this.devices.create(
+            { type, model: d.model || undefined, serialNumber, assetTag, locationId: d.locationId || undefined },
+            actor,
+          );
+          created.devices++;
+        } catch (err) {
+          errors.push({ kind: "device", label, message: this.friendlyError(err) });
+        }
       }
     }
 
@@ -168,10 +256,27 @@ export class IntakeService {
       action: "intake.commit",
       userId: actor.userId,
       entityType: "Intake",
-      metadata: created,
+      metadata: { ...created, duplicatesSkipped, errors },
     });
 
-    return created;
+    return { ...created, duplicatesSkipped, errors };
+  }
+
+  /** Translate a raw Prisma error into something a non-technical user can act on. */
+  private friendlyError(err: unknown): string {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const fields = ((err.meta?.target as string[] | undefined) ?? []).join(", ");
+      return fields ? `Already in use: ${fields}` : "Already exists (duplicate value)";
+    }
+    return (err as Error).message ?? "Unknown error";
+  }
+
+  /** High-confidence existing-Staff match, used to keep commit() from silently duplicating a person. */
+  private async findConfirmedDuplicate(fullName: string): Promise<PossibleDuplicate | null> {
+    const verdict = await this.staffMatcher.match(fullName);
+    return verdict.kind === "match"
+      ? { staffId: verdict.staff.id, fullName: verdict.staff.fullName, similarity: verdict.similarity }
+      : null;
   }
 
   // ---- extraction ----------------------------------------------------
@@ -198,13 +303,20 @@ export class IntakeService {
       '{"kind":"...","summary":"one sentence","newHires":[{"fullName":"","roleTitle":"","buildingName":"","startDate":""}],"devices":[{"type":"","model":"","serialNumber":"","assetTag":"","quantity":1}],"staff":[{"fullName":"","roleTitle":"","buildingName":"","email":"","phone":""}]}',
     ].join("\n");
 
+    // Pasted intake text is often the PII itself (a new hire's own name, email,
+    // phone). Redact every name/email/phone we can find — known staff plus a
+    // best-effort local guess at names in this text — before it leaves for
+    // completion, then rehydrate the model's JSON reply before parsing it.
+    const candidates = await this.candidatePiiStrings(rawText, roles, buildings);
+    const { text: safeRawText, map } = this.pii.pseudonymize(rawText, candidates);
+
     const user = [
       hint !== "AUTO" ? `The user says this is: ${hint}.` : "",
       `Known roles: ${roles.map((r) => r.title).join(", ")}`,
       `Known buildings: ${buildings.map((b) => b.name).join(", ")}`,
       "",
       "TEXT:",
-      rawText,
+      safeRawText,
     ].join("\n");
 
     const { text } = await this.llm.complete({
@@ -215,9 +327,98 @@ export class IntakeService {
       temperature: 0,
       maxTokens: 1200,
     });
-    const parsed = extractJson(text) as RawExtraction;
+    const parsed = extractJson(this.pii.rehydrate(text, map)) as RawExtraction;
     if (!parsed.kind) parsed.kind = "UNKNOWN";
     return parsed;
+  }
+
+  private async llmClassify(rawText: string, roles: Role[], buildings: Building[]): Promise<IntakeSegment[]> {
+    const system = [
+      "You split pasted work text (an email, note, or paste) into independent topical segments and classify each one.",
+      "Keep paragraphs about the SAME topic together in one segment — only split where the topic genuinely changes " +
+        "(e.g. a new-hire paragraph followed by an unrelated broken-printer paragraph is two segments; a normal " +
+        "multi-paragraph email about one thing is one segment).",
+      "Classify each segment as one of: TICKET (an IT problem or request to fix), NEW_HIRE (a person to onboard), " +
+        "STAFF (existing people for the directory), DEVICES (hardware to add to inventory), INVOICE (a purchase, " +
+        "invoice, or receipt with costs or line items), TASK (a to-do that isn't an IT problem, e.g. \"order more " +
+        "HDMI cables\"), or UNKNOWN.",
+      "For TICKET segments only, also guess `requesterNameGuess` from a name or signature if one is present " +
+        "(omit or leave empty if unsure). Never guess it for other kinds.",
+      "`summary` is a short human label for the segment, e.g. \"Ticket: printer broken on 3rd floor\".",
+      "Respond with ONLY a JSON object of this shape:",
+      '{"segments":[{"text":"...","kind":"...","summary":"...","requesterNameGuess":""}]}',
+    ].join("\n");
+
+    // Same redaction discipline as llmExtract — this call doesn't know the
+    // kind ahead of time, so it may contain ticket or new-hire PII.
+    const candidates = await this.candidatePiiStrings(rawText, roles, buildings);
+    const { text: safeRawText, map } = this.pii.pseudonymize(rawText, candidates);
+
+    const { text } = await this.llm.complete({
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: `TEXT:\n${safeRawText}` },
+      ],
+      temperature: 0,
+      maxTokens: 1600,
+    });
+
+    const parsed = extractJson(this.pii.rehydrate(text, map)) as { segments?: Array<Partial<IntakeSegment>> };
+    return (parsed.segments ?? [])
+      .filter((s) => s.text?.trim())
+      .slice(0, 20)
+      .map((s) => {
+        const kind = SEGMENT_KINDS.includes(s.kind as IntakeSegmentKind) ? (s.kind as IntakeSegmentKind) : "UNKNOWN";
+        const segText = s.text!.trim();
+        return {
+          text: segText,
+          kind,
+          summary: s.summary?.trim() || firstLineSummary(segText),
+          requesterNameGuess: kind === "TICKET" ? s.requesterNameGuess?.trim() || null : null,
+        };
+      });
+  }
+
+  /**
+   * Best-effort list of strings to redact before an intake paste leaves for
+   * completion: existing staff names (covers STAFF-directory pastes and any
+   * existing person mentioned in a NEW_HIRE email), plus emails, phone numbers,
+   * and labeled/likely name tokens pulled straight out of this paste (covers a
+   * brand-new hire who isn't in the Staff table yet). Over-matching is
+   * harmless — pseudonymize/rehydrate round-trips exactly, so a false-positive
+   * "name" (e.g. a building name) just costs the model a little context.
+   */
+  private async candidateStaffNames(): Promise<string[]> {
+    const staff = await this.prisma.staff.findMany({ select: { fullName: true, lastName: true } });
+    const names: string[] = [];
+    for (const s of staff) {
+      if (s.fullName) names.push(s.fullName);
+      if (s.lastName) names.push(s.lastName);
+    }
+    return names;
+  }
+
+  private async candidatePiiStrings(rawText: string, roles: Role[], buildings: Building[]): Promise<string[]> {
+    const known = await this.candidateStaffNames();
+
+    const emails = rawText.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) ?? [];
+    const phones = rawText.match(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g) ?? [];
+
+    const labeled = rawText.match(/\b(?:name|new hire|employee)\s*[:\-]\s*([^\n,]+)/gi) ?? [];
+    const labeledNames = labeled
+      .map((m) => m.replace(/\b(?:name|new hire|employee)\s*[:\-]\s*/i, "").trim())
+      .filter(Boolean);
+
+    // "Firstname Lastname"-shaped runs, minus known role/building titles so
+    // e.g. "Leasing Consultant" doesn't get needlessly redacted.
+    const properNoise = new Set(
+      [...roles.map((r) => r.title), ...buildings.map((b) => b.name)].map((s) => s.toLowerCase()),
+    );
+    const nameRuns = (rawText.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\b/g) ?? []).filter(
+      (n) => !properNoise.has(n.toLowerCase()),
+    );
+
+    return [...known, ...emails, ...phones, ...labeledNames, ...nameRuns];
   }
 
   /** Deterministic fallback used when no LLM key is configured. */
@@ -320,22 +521,19 @@ export class IntakeService {
 
   // ---- resolution ----------------------------------------------------
 
-  private resolve(
+  private async resolve(
     raw: RawExtraction,
     roles: Role[],
     buildings: Building[],
     source: "ai" | "basic",
-  ): AnalyzeResult {
+  ): Promise<AnalyzeResult> {
     const resolveRole = (name?: string) => matchByName(name, roles, (r) => r.title);
     const resolveBuilding = (name?: string) => matchByName(name, buildings, (b) => b.name);
 
-    return {
-      kind: raw.kind ?? "UNKNOWN",
-      source,
-      summary: raw.summary ?? "",
-      newHires: (raw.newHires ?? [])
+    const newHires = await Promise.all(
+      (raw.newHires ?? [])
         .filter((h) => h.fullName?.trim())
-        .map((h) => {
+        .map(async (h) => {
           const role = resolveRole(h.roleTitle);
           const building = resolveBuilding(h.buildingName);
           const parts = splitName(h.fullName!);
@@ -351,20 +549,25 @@ export class IntakeService {
             startDate: normalizeDate(h.startDate),
             adPrefix: parts ? `${parts.firstName[0] ?? ""}${parts.lastName}`.toLowerCase() : null,
             unresolved,
+            possibleDuplicate: await this.findConfirmedDuplicate(h.fullName!),
           };
         }),
-      devices: (raw.devices ?? [])
-        .map((d) => ({
-          type: normalizeDeviceType(d.type),
-          model: d.model?.trim() || null,
-          serialNumber: d.serialNumber?.trim() || null,
-          assetTag: d.assetTag?.trim() || null,
-          quantity: Math.max(1, Math.min(Number(d.quantity) || 1, 50)),
-        }))
-        .filter((d) => d.type !== "OTHER" || d.model || d.serialNumber || d.assetTag),
-      staff: (raw.staff ?? [])
+    );
+
+    const devices = (raw.devices ?? [])
+      .map((d) => ({
+        type: normalizeDeviceType(d.type),
+        model: d.model?.trim() || null,
+        serialNumber: d.serialNumber?.trim() || null,
+        assetTag: d.assetTag?.trim() || null,
+        quantity: Math.max(1, Math.min(Number(d.quantity) || 1, 50)),
+      }))
+      .filter((d) => d.type !== "OTHER" || d.model || d.serialNumber || d.assetTag);
+
+    const staff = await Promise.all(
+      (raw.staff ?? [])
         .filter((s) => s.fullName?.trim())
-        .map((s) => {
+        .map(async (s) => {
           const role = resolveRole(s.roleTitle);
           const building = resolveBuilding(s.buildingName);
           return {
@@ -375,9 +578,12 @@ export class IntakeService {
             buildingId: building?.id ?? null,
             email: s.email?.trim() || null,
             phone: s.phone?.trim() || null,
+            possibleDuplicate: await this.findConfirmedDuplicate(s.fullName!),
           };
         }),
-    };
+    );
+
+    return { kind: raw.kind ?? "UNKNOWN", source, summary: raw.summary ?? "", newHires, devices, staff };
   }
 }
 
@@ -410,4 +616,77 @@ function normalizeDate(raw: string | undefined): string | null {
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Deterministic fallback for classify() when no LLM key is configured.
+ * Splits on blank lines, classifies each paragraph, then merges adjacent
+ * paragraphs that share a kind — so a normal multi-paragraph single-topic
+ * email doesn't get shredded into fake segments, only genuine topic changes
+ * produce a new one.
+ */
+export function heuristicClassify(rawText: string): IntakeSegment[] {
+  const paragraphs = rawText
+    .split(/\r?\n\s*\r?\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const chunks = paragraphs.length > 0 ? paragraphs : [rawText.trim()];
+
+  const merged: Array<{ text: string; kind: IntakeSegmentKind }> = [];
+  for (const chunkText of chunks) {
+    const detected = detectSegmentKind(chunkText);
+    const last = merged[merged.length - 1];
+    // A paragraph with no category signal of its own (UNKNOWN) is far more
+    // likely a continuation of the topic just above it than a genuinely new
+    // unrelated segment — inherit the previous kind rather than splitting.
+    const kind = detected === "UNKNOWN" && last ? last.kind : detected;
+    if (last && last.kind === kind) {
+      last.text = `${last.text}\n\n${chunkText}`;
+    } else {
+      merged.push({ text: chunkText, kind });
+    }
+  }
+
+  return merged
+    .filter((m) => m.text.trim())
+    .map((m) => ({
+      text: m.text,
+      kind: m.kind,
+      summary: firstLineSummary(m.text),
+      requesterNameGuess: null,
+    }));
+}
+
+export function firstLineSummary(text: string): string {
+  const line = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l.length > 0) ?? "";
+  return line.length > 80 ? `${line.slice(0, 77)}…` : line;
+}
+
+/** Extended version of detectKind() with TICKET/INVOICE/TASK signals, used only by classify(). */
+export function detectSegmentKind(text: string): IntakeSegmentKind {
+  const low = text.toLowerCase();
+  const count = (patterns: RegExp[]) => patterns.filter((re) => re.test(low)).length;
+
+  const deviceHits = count([
+    /serial|s\/n|asset tag|\bsku\b|\bqty\b|\bx\d|model/, ...TYPE_KEYWORDS.map(([k]) => new RegExp(k)),
+  ]);
+  const hireHits = count([/new hire|onboard|start date|starts?\b|joining|role|position|title/]);
+  const ticketHits = count([
+    /broken|not working|can'?t (?:log|connect|print|access)|won'?t (?:connect|turn on|print)|issue\b|problem\b|error\b|\bdown\b|locked out|stuck\b|help(?:ing)? with/,
+  ]);
+  const invoiceHits = count([/\$\s?\d|invoice|receipt|purchase order|\bpo\s?#|\btotal\b|subtotal|order\s?#/]);
+  const taskHits = count([/\bto-?do\b|follow up|remind(?:er)?|need to|don'?t forget|order more|schedule\b/]);
+
+  const scored: Array<[IntakeSegmentKind, number]> = [
+    ["DEVICES", deviceHits >= 2 ? deviceHits : 0],
+    ["INVOICE", invoiceHits],
+    ["TICKET", ticketHits],
+    ["NEW_HIRE", hireHits],
+    ["TASK", taskHits],
+  ];
+  const best = scored.reduce((a, b) => (b[1] > a[1] ? b : a));
+  return best[1] > 0 ? best[0] : "UNKNOWN";
 }

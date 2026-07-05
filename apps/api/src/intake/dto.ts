@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -20,11 +21,18 @@ export class AnalyzeIntakeDto {
   hint?: IntakeHint;
 }
 
+export class ClassifyIntakeDto {
+  @IsString() @MaxLength(20000)
+  rawText!: string;
+}
+
 export class CommitNewHireItem {
   @IsString() fullName!: string;
   @IsString() roleId!: string;
   @IsString() buildingId!: string;
   @IsOptional() @IsString() startDate?: string;
+  /** User has seen the possible-duplicate warning and wants to create anyway. */
+  @IsOptional() @IsBoolean() confirmDuplicate?: boolean;
 }
 
 export class CommitDeviceItem {
@@ -42,6 +50,8 @@ export class CommitStaffItem {
   @IsOptional() @IsString() buildingId?: string;
   @IsOptional() @IsString() email?: string;
   @IsOptional() @IsString() phone?: string;
+  /** User has seen the possible-duplicate warning and wants to create anyway. */
+  @IsOptional() @IsBoolean() confirmDuplicate?: boolean;
 }
 
 export class CommitIntakeDto {

@@ -136,6 +136,24 @@ export class TicketsService {
   }
 
   /** Ingest a pasted ticket, draft a reply with recalled context, persist both. */
+  /**
+   * Preview-only: turn pasted text into a NeutralTicket with no DB write and
+   * no AI draft call. Used by the universal-intake review UI so a
+   * ticket-shaped segment can be shown/edited before the agent commits to
+   * actually creating it (and paying for a drafted reply).
+   */
+  preview(dto: DraftTicketDto) {
+    if (!dto.rawText?.trim() && !dto.body?.trim()) {
+      throw new BadRequestException("Provide rawText or body");
+    }
+    const neutral = this.adapter.ingest(dto);
+    return {
+      subject: neutral.subject,
+      body: neutral.body,
+      requester: neutral.requester ?? null,
+    };
+  }
+
   async draft(dto: DraftTicketDto, actor: AuthenticatedUser) {
     if (!dto.rawText?.trim() && !dto.body?.trim()) {
       throw new BadRequestException("Provide rawText or body");
@@ -144,10 +162,22 @@ export class TicketsService {
     const neutral = this.adapter.ingest(dto);
 
     // Best-effort link to an existing staff member (no silent duplicate create).
+    // An ambiguous ("suggest") match isn't dropped — its candidates are saved
+    // so the agent can pick the right person instead of the ticket going
+    // unlinked with no trace anything was even found.
     let requesterStaffId: string | null = null;
+    let requesterCandidates: Array<{ staffId: string; fullName: string; similarity: number }> | null = null;
     if (neutral.requester?.fullName) {
       const verdict = await this.matcher.match(neutral.requester.fullName);
-      if (verdict.kind === "match") requesterStaffId = verdict.staff.id;
+      if (verdict.kind === "match") {
+        requesterStaffId = verdict.staff.id;
+      } else if (verdict.kind === "suggest") {
+        requesterCandidates = verdict.candidates.map((c) => ({
+          staffId: c.staff.id,
+          fullName: c.staff.fullName,
+          similarity: c.similarity,
+        }));
+      }
     }
 
     const priority = autoPrioritize(neutral.subject, neutral.body);
@@ -161,6 +191,7 @@ export class TicketsService {
         priority,
         slaDueAt: slaDueFor(priority, now),
         requesterStaffId,
+        requesterCandidates: requesterCandidates as unknown as Prisma.InputJsonValue,
         raw: (neutral.raw ?? null) as Prisma.InputJsonValue,
       },
     });
@@ -291,6 +322,30 @@ export class TicketsService {
       userId: actor.userId,
       entityType: "Ticket",
       entityId: id,
+    });
+    return this.get(id, actor.userId);
+  }
+
+  /**
+   * Resolve an ambiguous requester match (or link one manually). Called from
+   * the "possible match" picker the agent sees when draft() couldn't
+   * confidently link the pasted requester name to an existing Staff record.
+   */
+  async linkRequester(id: string, staffId: string, actor: AuthenticatedUser) {
+    await this.get(id);
+    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+    if (!staff) throw new BadRequestException("Unknown staff member");
+
+    await this.prisma.ticket.update({
+      where: { id },
+      data: { requesterStaffId: staffId, requesterCandidates: Prisma.JsonNull },
+    });
+    await this.audit.record({
+      action: "ticket.link_requester",
+      userId: actor.userId,
+      entityType: "Ticket",
+      entityId: id,
+      metadata: { staffId },
     });
     return this.get(id, actor.userId);
   }

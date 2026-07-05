@@ -356,6 +356,10 @@ model Ticket {
   externalId       String?
   requesterStaffId String?
   requester        Staff?         @relation(fields: [requesterStaffId], references: [id])
+  // Ambiguous (non-high-confidence) StaffMatcherService candidates for the
+  // pasted requester name, so the agent can pick the right person instead of
+  // the ticket silently going unlinked. Cleared once requesterStaffId is set.
+  requesterCandidates Json?
   subject          String
   body             String
   category         String?

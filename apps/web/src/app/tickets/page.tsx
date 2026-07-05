@@ -33,6 +33,7 @@ interface Reply {
 interface Sla { state: SlaStateName; dueAt: string | null; hoursLeft: number | null }
 interface Requester { id: string; fullName: string; email?: string | null; building?: { name: string } | null }
 interface Assignee { id: string; name: string }
+interface RequesterCandidate { staffId: string; fullName: string; similarity: number }
 interface Ticket {
   id: string;
   source: string;
@@ -45,6 +46,7 @@ interface Ticket {
   createdAt: string;
   slaDueAt: string | null;
   requester: Requester | null;
+  requesterCandidates: RequesterCandidate[] | null;
   assignedTo: Assignee | null;
   drafts: Draft[];
   replies?: Reply[];
@@ -241,7 +243,7 @@ function Drafter({ onDrafted }: { onDrafted: (t: Ticket) => void }) {
 }
 
 function TicketDetail({ ticket, onChanged }: { ticket: Ticket; onChanged: (t: Ticket) => void }) {
-  const [busy, setBusy] = useState<"redraft" | "resolve" | "claim" | "send" | null>(null);
+  const [busy, setBusy] = useState<"redraft" | "resolve" | "claim" | "send" | "link" | null>(null);
   const [resolution, setResolution] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -319,6 +321,12 @@ function TicketDetail({ ticket, onChanged }: { ticket: Ticket; onChanged: (t: Ti
               {ticket.requester.email ? ` · ${ticket.requester.email}` : ""}
               <span className="ml-1.5 rounded bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium text-accent">linked</span>
             </span>
+          ) : ticket.requesterCandidates?.length ? (
+            <RequesterPicker
+              candidates={ticket.requesterCandidates}
+              busy={busy !== null}
+              onPick={(staffId) => action("link-requester", "link", { staffId })}
+            />
           ) : (
             <span className="text-ink-faint">Requester not linked to a staff record</span>
           )}
@@ -478,6 +486,27 @@ function TicketDetail({ ticket, onChanged }: { ticket: Ticket; onChanged: (t: Ti
         </div>
       </div>
     </section>
+  );
+}
+
+function RequesterPicker({
+  candidates, busy, onPick,
+}: { candidates: RequesterCandidate[]; busy: boolean; onPick: (staffId: string) => void }) {
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <span className="text-honey">Possible match, not linked:</span>
+      {candidates.map((c) => (
+        <button
+          key={c.staffId}
+          onClick={() => onPick(c.staffId)}
+          disabled={busy}
+          className="rounded-full border border-honey/40 bg-honey-wash px-2 py-0.5 text-[11px] font-medium text-honey transition hover:border-honey"
+          title={`${Math.round(c.similarity * 100)}% match`}
+        >
+          {c.fullName} ({Math.round(c.similarity * 100)}%)
+        </button>
+      ))}
+    </span>
   );
 }
 

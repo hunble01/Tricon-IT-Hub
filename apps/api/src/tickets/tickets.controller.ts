@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { TicketPriority, TicketSource, TicketStatus } from "@prisma/client";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types";
-import { AssignTicketDto, DraftTicketDto, ResolveTicketDto, SendReplyDto } from "./dto";
+import { AssignTicketDto, DraftTicketDto, LinkRequesterDto, ResolveTicketDto, SendReplyDto } from "./dto";
 import { TicketsService } from "./tickets.service";
 
 @Controller("tickets")
@@ -33,6 +33,11 @@ export class TicketsController {
   @Get(":id")
   get(@Param("id") id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.svc.get(id, actor.userId);
+  }
+
+  @Post("preview")
+  preview(@Body() dto: DraftTicketDto) {
+    return this.svc.preview(dto);
   }
 
   @Post("draft")
@@ -66,6 +71,15 @@ export class TicketsController {
   @Post(":id/unassign")
   unassign(@Param("id") id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.svc.unassign(id, actor);
+  }
+
+  @Post(":id/link-requester")
+  linkRequester(
+    @Param("id") id: string,
+    @Body() dto: LinkRequesterDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.svc.linkRequester(id, dto.staffId, actor);
   }
 
   @Post(":id/send")
